@@ -176,6 +176,18 @@ Or choose the format:
 @version('compact')
 ```
 
+You can configure the directive name:
+
+``` yaml
+blade_directive: printversion
+```
+
+Then 
+
+``` php
+@printversion('compact')
+```
+
 ### Git tags
 
 You can use your git tags as application versions, all you need is to set the version source to "git":
@@ -229,26 +241,70 @@ format:
 
 Those are the commands you have at your disposal:
 
+#### version:show
+
+Show the current app version:
+
 ``` text
-  version:show     Show current app version and build
+> php artisan version:show
+> PragmaRX version 1.0.0 (build 701031)
 
-  version:major    Increment app major version
+> php artisan version:show --format=compact
+> PragmaRX v1.0.0-701031
 
-  version:minor    Increment app minor version
-
-  version:patch    Increment app patch version
-
-  version:build    Increment app build number
-  
-  version:refresh  Clear cache and refresh versions
+> php artisan version:show --format=compact --suppress-app-name
+> v1.0.0-701031
 ```
 
-Here's an example of `version:minor`:
+#### version:(major|minor|patch|build)
+
+Increment the version item:
 
 ``` text
 $ php artisan version:minor
 New minor version: 5
 MyApp version 1.5.0 (build 701045)
+```
+
+#### version:refresh
+
+Clear cache and refresh versions
+
+``` text
+> a version:refresh
+> Version was refreshed.
+> PragmaRX version 1.0.0 (build 4f76c)
+```
+
+#### version:absorb
+
+Version can absorb git version and build to the config file, so you can delete the .git folder and still keep your version and build cached for fast access. You have to configure `git_absorb` in your config file:
+
+``` yaml
+build:
+  #...  
+  git_absorb: git-local # "false", "git-local" or "git-remote"
+```
+
+And run it 
+
+``` bash
+php artisan version:absorb
+```
+
+The usual configuration setup to implement absorb is:
+
+``` yaml
+version_source: config             ## must be set as config
+current:
+    major: 1                       ## |
+    minor: 0                       ## | --> will be changed by absorb
+    patch: 0                       ## |
+    git_absorb: git-local          ## configure to get from local or remote
+build:
+    mode: number                   ## must be set as number
+    number: f477c8                 ## will be changed by absorb
+    git_absorb: git-local          ## configure to get from local or remote 
 ```
 
 ## Install
@@ -278,7 +334,15 @@ As git versions are cached, you can tell composer to refresh your version number
     ...
     "@php artisan version:refresh"
 ]
-``` 
+```
+
+[Optional] You may also can automated this process by set inside your `.git/hooks/post-commit`. It will automatic run the command once you have make a commit.
+
+``` bash
+#!/bin/sh
+
+php artisan version:refresh
+```
 
 If you are using Git commits on your build numbers, you may have to add the git repository to your .env file
 
@@ -292,6 +356,12 @@ VERSION_GIT_REMOTE_REPOSITORY=https://github.com/antonioribeiro/version.git
 
 - Laravel 5.5
 - PHP 7.0
+
+## Testing
+
+``` bash
+$ composer test
+```
 
 ## Troubleshooting
 

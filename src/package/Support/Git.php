@@ -2,6 +2,7 @@
 
 namespace PragmaRX\Version\Package\Support;
 
+use Exception;
 use PragmaRX\Version\Package\Exceptions\GitTagNotFound;
 use Symfony\Component\Process\Process;
 
@@ -24,6 +25,31 @@ class Git
         $this->cache = $cache;
     }
 
+    private function cleanOutput($getOutput)
+    {
+        return trim(str_replace("\n", '', $getOutput));
+    }
+
+    /**
+     * Break and extract version from string.
+     *
+     * @param $string
+     *
+     * @throws GitTagNotFound
+     *
+     * @return array
+     */
+    public function extractVersion($string)
+    {
+        preg_match_all($this->config->get('git.version.matcher'), $string, $matches);
+
+        if (empty($matches[0])) {
+            throw new GitTagNotFound('No git tags found in this repository');
+        }
+
+        return $matches;
+    }
+
     /**
      * Get the build git repository url.
      *
@@ -37,37 +63,51 @@ class Git
     /**
      * Make a git version command.
      *
+     * @param string|null $mode
+     *
      * @return string
      */
-    public function makeGitVersionRetrieverCommand()
+    public function makeGitVersionRetrieverCommand($mode = null)
     {
+        $mode = is_null($mode)
+            ? $this->config->get('version_source')
+            : $mode;
+
         return $this->searchAndReplaceRepository(
-            $this->config->get('git.version.'.$this->config->get('version_source'))
+            $this->config->get('git.version.'.$mode)
         );
     }
 
     /**
      * Get the current git commit number, to be used as build number.
      *
+     * @param string|null $mode
+     *
      * @return string
      */
-    public function getCommit()
+    public function getCommit($mode = null)
     {
         return $this->getFromGit(
-            $this->makeGitHashRetrieverCommand(),
+            $this->makeGitHashRetrieverCommand($mode),
             Constants::VERSION_CACHE_KEY,
-            $this->config->get('build.length')
+            $this->config->get('build.length', 6)
         );
     }
 
     /**
      * Get the git hash retriever command.
      *
+     * @param string|null $mode
+     *
      * @return \Illuminate\Config\Repository|mixed
      */
-    public function getGitHashRetrieverCommand()
+    public function getGitHashRetrieverCommand($mode = null)
     {
-        return  $this->config->get('git.'.$this->config->get('build.mode'));
+        $mode = is_null($mode)
+            ? $this->config->get('build.mode')
+            : $mode;
+
+        return $this->config->get('git.'.$mode);
     }
 
     /**
@@ -94,11 +134,15 @@ class Git
 
     /**
      * Get the current app version from Git.
+     *
+     * @param null $mode
+     *
+     * @return bool|mixed|null|string
      */
-    public function getVersionFromGit()
+    public function getVersionFromGit($mode = null)
     {
         return $this->getFromGit(
-            $this->makeGitVersionRetrieverCommand(),
+            $this->makeGitVersionRetrieverCommand($mode),
             Constants::BUILD_CACHE_KEY
         );
     }
@@ -126,20 +170,16 @@ class Git
      */
     public function version($type)
     {
-        preg_match_all($this->config->get('git.version.matcher'), $this->getVersionFromGit(), $matches);
-
-        if (empty($matches[0])) {
-            throw new GitTagNotFound('No git tags not found in this repository');
-        }
+        $version = $this->extractVersion($this->getVersionFromGit());
 
         return [
-                   'major' => $this->getMatchedVersionItem($matches, 1),
+           'major' => $this->getMatchedVersionItem($version, 1),
 
-                   'minor' => $this->getMatchedVersionItem($matches, 2),
+           'minor' => $this->getMatchedVersionItem($version, 2),
 
-                   'patch' => $this->getMatchedVersionItem($matches, 3),
+           'patch' => $this->getMatchedVersionItem($version, 3),
 
-                   'build' => $this->getMatchedVersionItem($matches, 4),
+           'build' => $this->getMatchedVersionItem($version, 4),
         ][$type];
     }
 
@@ -156,12 +196,14 @@ class Git
     /**
      * Make the git hash retriever command.
      *
+     * @param string|null $mode
+     *
      * @return mixed
      */
-    public function makeGitHashRetrieverCommand()
+    public function makeGitHashRetrieverCommand($mode)
     {
         return $this->searchAndReplaceRepository(
-            $this->getGitHashRetrieverCommand()
+            $this->getGitHashRetrieverCommand($mode)
         );
     }
 
@@ -182,6 +224,8 @@ class Git
      *
      * @param $command
      *
+     * @throws Exception
+     *
      * @return string
      */
     protected function shell($command)
@@ -194,6 +238,6 @@ class Git
             return '';
         }
 
-        return $process->getOutput();
+        return $this->cleanOutput($process->getOutput());
     }
 }
